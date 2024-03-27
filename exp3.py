@@ -101,11 +101,12 @@ class UCTAgent:
         self.last_node = new_node
 
     def simulation(self):
-        while self.simulator.get_state()["turns_to_go"] > 0:
+        while self.simulator.get_state()["turns to go"] > 0:
             actions = self.possible_actions(self.state)
             random_action = random.choice(list(actions))
             self.simulator.act(random_action, self.player_number)
             self.state = self.simulator.get_state()
+        print("simulation done")
         return self.simulator.get_score()[f"player {self.player_number}"] - self.simulator.get_score()[f"player {3 - self.player_number}"]
 
     def backpropagation(self, simulation_result):
@@ -116,7 +117,7 @@ class UCTAgent:
 
     def act(self, state):
         self.state = state
-        root = UCTNode(None, None, [], self.player_number)
+        root = UCTNode(None, None, [],  3 - self.player_number)
         tree = UCTTree(root)
         for i in range(100):
             cur_node = self.selection(tree)
