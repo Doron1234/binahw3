@@ -25,7 +25,7 @@ class Simulator:
         """
         return the neighbors of a location
         """
-        if (type(location) == str):
+        if str == type(location):
             return []
         x, y = location[0], location[1]
         neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]

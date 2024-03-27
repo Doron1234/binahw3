@@ -82,6 +82,8 @@ class Game:
         print(f'***********  starting a first round!  ************ \n \n')
         self.agents = [self.initiate_agent(exp3, 1),
                        self.initiate_agent(sample_agent, 2)]
+        # self.agents = [self.initiate_agent(sample_agent, 1),
+        #                self.initiate_agent(sample_agent, 2)]
         self.ids = ['Your agent', 'Rival agent']
         self.play_episode()
         print(self.simulator.state)
