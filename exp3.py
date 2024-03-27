@@ -1,3 +1,5 @@
+import math
+
 IDS = ["213272644", "214422750"]
 from simulator import Simulator
 import random
@@ -6,16 +8,10 @@ from itertools import product
 
 class Agent:
     def __init__(self, initial_state, player_number):
-        self.ids = IDS
-        self.player_number = player_number
-        self.my_ships = []
-        self.simulator = Simulator(initial_state)
-        for ship_name, ship in initial_state['pirate_ships'].items():
-            if ship['player'] == player_number:
-                self.my_ships.append(ship_name)
+        self.uct = UCTAgent(initial_state, player_number)
 
     def act(self, state):
-        raise NotImplementedError
+        return self.uct.act(state)
 
 
 class UCTNode:
@@ -28,7 +24,6 @@ class UCTNode:
         self.children = []
         self.actions = old_actions + [new_action]
         self.player_number = player_number
-        self.finished_expansion = False
         self.num_visits = 0
         self.sum_diffs = 0
         self.children_actions = set()
@@ -37,15 +32,25 @@ class UCTNode:
         self.children.append(child)
         self.children_actions.add(child.actions[-1])
 
+    def get_num_visits(self):
+        return self.num_visits
+
+    def update(self, result):
+        self.num_visits += 1
+        self.sum_diffs += result
+
     def UCB1(self):
         if self.player_number == 1:
             if self.num_visits == 0:
                 return float('inf')
-            return self.sum_diffs / self.num_visits + 2 * (2 * (self.num_visits ** 2)) ** 0.5
+            return self.sum_diffs / self.num_visits + (2 * (math.log(self.parent.get_num_visits()))/self.num_visits) ** 0.5
         else:
             if self.num_visits == 2:
                 return float('-inf')
-            return self.sum_diffs / self.num_visits - 2 * (2 * (self.num_visits ** 2)) ** 0.5
+            return self.sum_diffs / self.num_visits + (2 * (math.log(self.parent.get_num_visits()))/self.num_visits) ** 0.5
+
+    def get_empirical_mean(self):
+        return self.sum_diffs / self.num_visits
 
 
 
@@ -84,18 +89,42 @@ class UCTAgent:
                 cur_node = min(cur_node.children, key=lambda x: x.UCB1())
             self.simulator.act(cur_node.actions[-1], cur_node.player_number)
             self.state = self.simulator.get_state()
-
+        return cur_node
     def expansion(self, UCT_tree, parent_node):
-        raise NotImplementedError
+        actions = self.possible_actions(self.state)
+        new_actions = actions - parent_node.children_actions
+        random_action = random.choice(list(new_actions))
+        new_node = UCTNode(parent_node, random_action, parent_node.actions, 3 - parent_node.player_number)
+        parent_node.add_child(new_node)
+        self.simulator.act(new_node.actions[-1], new_node.player_number)
+        self.state = self.simulator.get_state()
+        self.last_node = new_node
 
     def simulation(self):
-        raise NotImplementedError
+        while self.simulator.get_state()["turns_to_go"] > 0:
+            actions = self.possible_actions(self.state)
+            random_action = random.choice(list(actions))
+            self.simulator.act(random_action, self.player_number)
+            self.state = self.simulator.get_state()
+        return self.simulator.get_score()[f"player {self.player_number}"] - self.simulator.get_score()[f"player {3 - self.player_number}"]
 
     def backpropagation(self, simulation_result):
-        raise NotImplementedError
+        node = self.last_node
+        while node is not None:
+            node.update(simulation_result)
+            node = node.parent
 
     def act(self, state):
-        raise NotImplementedError
+        self.state = state
+        root = UCTNode(None, None, [], self.player_number)
+        tree = UCTTree(root)
+        for i in range(100):
+            cur_node = self.selection(tree)
+            self.expansion(tree, cur_node)
+            simulation_result = self.simulation()
+            self.backpropagation(simulation_result)
+        best_node = max(tree.root.children, key=lambda x: x.get_empirical_mean())
+        return best_node.actions[0]
 
     def finished_expansion(self, state, node):
         actions = self.possible_actions(state)
@@ -103,7 +132,6 @@ class UCTAgent:
         if len(diff) == 0:
             return True
         return False
-
 
     def possible_actions(self, state):
         # 5 actions - "sail", “collect_treasure”, “deposit_treasures”, "plunder",
@@ -139,7 +167,7 @@ class UCTAgent:
             actions[ship].add(("wait", ship))
 
         acts_lists = list(actions.values())
-        all_actions = list(product(*acts_lists))
-        print("actions:", all_actions)
+        all_actions = set(product(*acts_lists))
+        # print("actions:", all_actions)
         return all_actions
 
