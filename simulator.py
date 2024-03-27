@@ -239,6 +239,7 @@ class Simulator:
             self.apply_action(action, player)
             self.add_treasure()
         else:
+            print("uh - oh!")
             raise ValueError(f"Illegal action!")
 
     def print_scores(self):

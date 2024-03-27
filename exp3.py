@@ -87,6 +87,8 @@ class UCTAgent:
 
     def selection(self, UCT_tree):
         cur_node = UCT_tree.root
+        self.state = self.simulator.get_state()
+
         while self.finished_expansion(self.state, cur_node):
             # max or min based on player number
             if cur_node.player_number == self.player_number:
@@ -98,6 +100,7 @@ class UCTAgent:
         return cur_node
 
     def expansion(self, UCT_tree, parent_node):
+        self.state = self.simulator.get_state()
         actions = self.possible_actions(self.state)
         new_actions = actions - parent_node.children_actions
         random_action = random.choice(list(new_actions))
@@ -108,7 +111,10 @@ class UCTAgent:
         self.last_node = new_node
 
     def simulation(self):
-        while self.simulator.turns_to_go > 0:
+        # while self.simulator.turns_to_go > 0:
+        counter = 0
+        while counter < 20:
+            counter += 1
             cur_state = self.state
             if self.current_player == 1:
                 order = (1, 2)
@@ -121,7 +127,6 @@ class UCTAgent:
                 self.simulator.check_collision_with_marines()
                 self.simulator.move_marines()
                 self.current_player = 1
-
             else:
                 actions = self.possible_actions(cur_state)
                 random_action = random.choice(list(actions))
@@ -138,9 +143,9 @@ class UCTAgent:
 
         self.simulator.set_state(self.initial_state)
         self.simulator.turns_to_go = self.initial_state["turns to go"]
+        ret = self.simulator.get_score()[f"player {self.player_number}"] - self.simulator.get_score()[f"player {3 - self.player_number}"]
         self.simulator.score = {'player 1': 0, 'player 2': 0}
-        return self.simulator.get_score()[f"player {self.player_number}"] - self.simulator.get_score()[
-            f"player {3 - self.player_number}"]
+        return ret
 
     def backpropagation(self, simulation_result):
         node = self.last_node
@@ -152,7 +157,8 @@ class UCTAgent:
         self.state = state
         root = UCTNode(None, None, [], 3 - self.player_number)
         tree = UCTTree(root)
-        for i in range(100):
+        for i in range(200):
+            self.simulator = Simulator(state)
             cur_node = self.selection(tree)
             self.expansion(tree, cur_node)
             simulation_result = self.simulation()
