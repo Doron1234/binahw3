@@ -9,6 +9,7 @@ from itertools import product
 class Agent:
     def __init__(self, initial_state, player_number):
         self.uct = UCTAgent(initial_state, player_number)
+        self.ids = self.uct.ids
 
     def act(self, state):
         return self.uct.act(state)
@@ -23,7 +24,10 @@ class UCTNode:
 
         self.parent = parent
         self.children = []
-        self.actions = old_actions + [new_action]
+        if new_action is None:
+            self.actions = old_actions
+        else:
+            self.actions = old_actions + [new_action]
         self.player_number = player_number
         self.num_visits = 0
         self.sum_diffs = 0
@@ -104,7 +108,7 @@ class UCTAgent:
         self.last_node = new_node
 
     def simulation(self):
-        while self.simulator.get_state()["turns to go"] > 0:
+        while self.simulator.turns_to_go > 0:
             cur_state = self.state
             if self.current_player == 1:
                 order = (1, 2)
@@ -132,7 +136,9 @@ class UCTAgent:
                 cur_state = self.simulator.get_state()
                 self.current_player = 2
 
-        print("simulation done")
+        self.simulator.set_state(self.initial_state)
+        self.simulator.turns_to_go = self.initial_state["turns to go"]
+        self.simulator.score = {'player 1': 0, 'player 2': 0}
         return self.simulator.get_score()[f"player {self.player_number}"] - self.simulator.get_score()[
             f"player {3 - self.player_number}"]
 
