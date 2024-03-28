@@ -1,9 +1,25 @@
-import math
-
 IDS = ["213272644", "214422750"]
+
 from simulator import Simulator
 import random
 from itertools import product
+import math
+
+random.seed(42)
+
+
+# class Agent:
+#     def __init__(self, initial_state, player_number):
+#         self.ids = IDS
+#         self.player_number = player_number
+#         self.my_ships = []
+#         self.simulator = Simulator(initial_state)
+#         for ship_name, ship in initial_state['pirate_ships'].items():
+#             if ship['player'] == player_number:
+#                 self.my_ships.append(ship_name)
+#
+#     def act(self, state):
+#         raise NotImplementedError
 
 
 class Agent:
@@ -20,41 +36,39 @@ class UCTNode:
     A class for a single node. not mandatory to use but may help you.
     """
 
-    def __init__(self, parent, new_action, old_actions, player_number):
+    def __init__(self, parent, action, player_number):
 
         self.parent = parent
         self.children = []
-        if new_action is None:
-            self.actions = old_actions
-        else:
-            self.actions = old_actions + [new_action]
+        self.action = action
         self.player_number = player_number
         self.num_visits = 0
         self.sum_diffs = 0
         self.children_actions = set()
 
-    def add_child(self, child):
-        self.children.append(child)
-        self.children_actions.add(child.actions[-1])
+    def add_child(self, action):
+        if action not in self.children_actions:
+            child = UCTNode(self, action, 3 - self.player_number)
+            self.children.append(child)
+            self.children_actions.add(action)
 
-    def get_num_visits(self):
-        return self.num_visits
+    def select_child(self, actions):
+        relevant_children = [child for child in self.children if child.action in actions]
+        if not relevant_children:
+            return None
+        return max(relevant_children, key=lambda child: child.UCB1())
 
     def update(self, result):
         self.num_visits += 1
         self.sum_diffs += result
 
     def UCB1(self):
-        if self.player_number == 1:
-            if self.num_visits == 0:
-                return float('inf')
-            return self.sum_diffs / self.num_visits + (
-                    2 * (math.log(self.parent.get_num_visits())) / self.num_visits) ** 0.5
-        else:
-            if self.num_visits == 2:
-                return float('-inf')
-            return self.sum_diffs / self.num_visits + (
-                    2 * (math.log(self.parent.get_num_visits())) / self.num_visits) ** 0.5
+        if self.num_visits == 0:
+            return float('inf')
+        is_p1 = 1 if self.player_number == 1 else -1
+        # normal case for p1 but if p2 it is the opposite of what it minimizes so it maxes it as well
+        return self.get_empirical_mean() + is_p1 * (
+                2 * (math.log(self.parent.num_visits)) / self.num_visits) ** 0.5
 
     def get_empirical_mean(self):
         return self.sum_diffs / self.num_visits
@@ -65,113 +79,102 @@ class UCTTree:
     A class for a Tree. not mandatory to use but may help you.
     """
 
-    def __init__(self, root):
-        self.root = root
+    def __init__(self):
+        raise NotImplementedError
 
 
 class UCTAgent:
     def __init__(self, initial_state, player_number):
         self.ids = IDS
-        self.initial_state = initial_state
         self.player_number = player_number
-        self.pirate_ships = initial_state['pirate_ships']
         self.my_ships = []
         self.enemy_ships = []
         self.simulator = Simulator(initial_state)
-        self.current_player = player_number
         for ship_name, ship in initial_state['pirate_ships'].items():
             if ship['player'] == player_number:
                 self.my_ships.append(ship_name)
             else:
                 self.enemy_ships.append(ship_name)
+        self.current_player =player_number
+        self.root = UCTNode(None, None, 3 - player_number)
+        # self.expansion(self.root)
 
-    def selection(self, UCT_tree):
-        cur_node = UCT_tree.root
-        self.state = self.simulator.get_state()
-
-        while self.finished_expansion(self.state, cur_node):
-            # max or min based on player number
-            if cur_node.player_number == self.player_number:
-                cur_node = max(cur_node.children, key=lambda x: x.UCB1())
+    # def selection(self, UCT_tree):
+    def selection(self):
+        possible_actions = self.possible_actions(self.simulator.get_state())
+        cur_node = self.root.select_child(possible_actions)
+        if cur_node is None:
+            return self.root
+        while True:
+            if self.current_player == 1:
+                self.simulator.act(cur_node.action, self.current_player)
+                self.current_player = 2
             else:
-                cur_node = min(cur_node.children, key=lambda x: x.UCB1())
-            self.simulator.act(cur_node.actions[-1], cur_node.player_number)
-            self.state = self.simulator.get_state()
-        return cur_node
+                self.simulator.act(cur_node.action, self.current_player)
+                self.current_player = 1
+                self.simulator.check_collision_with_marines()
+                self.simulator.move_marines()
+            possible_actions = self.possible_actions(self.simulator.get_state())
+            next_node = cur_node.select_child(possible_actions)
+            if next_node is not None:
+                cur_node = next_node
+            else:
+                return cur_node
 
-    def expansion(self, UCT_tree, parent_node):
-        self.state = self.simulator.get_state()
-        actions = self.possible_actions(self.state)
-        new_actions = actions - parent_node.children_actions
-        random_action = random.choice(list(new_actions))
-        new_node = UCTNode(parent_node, random_action, parent_node.actions, 3 - parent_node.player_number)
-        parent_node.add_child(new_node)
-        self.simulator.act(new_node.actions[-1], new_node.player_number)
-        self.state = self.simulator.get_state()
-        self.last_node = new_node
+    # def expansion(self, UCT_tree, parent_node):
+    def expansion(self, parent_node):
+        # should be here after the action in parent_node was executed
+        all_actions = self.possible_actions(self.simulator.get_state())
+        for action in all_actions:
+            parent_node.add_child(action)
 
     def simulation(self):
-        # while self.simulator.turns_to_go > 0:
         counter = 0
-        while counter < 20:
+        while counter < 50:
             counter += 1
-            cur_state = self.state
+            cur_state = self.simulator.get_state()
             if self.current_player == 1:
-                order = (1, 2)
-                for player in order:
-                    self.current_player = player
-                    actions = self.possible_actions(cur_state)
-                    random_action = random.choice(list(actions))
-                    self.simulator.act(random_action, player)
-                    cur_state = self.simulator.get_state()
+                action = random.choice(list(self.possible_actions(cur_state)))
+                self.simulator.act(action, self.current_player)
+                cur_state = self.simulator.get_state()
+                self.current_player = 2
+                action = random.choice(list(self.possible_actions(cur_state)))
+                self.simulator.act(action, self.current_player)
                 self.simulator.check_collision_with_marines()
                 self.simulator.move_marines()
                 self.current_player = 1
             else:
-                actions = self.possible_actions(cur_state)
-                random_action = random.choice(list(actions))
-                self.simulator.act(random_action, self.current_player)
+                action = random.choice(list(self.possible_actions(cur_state)))
+                self.simulator.act(action, self.current_player)
                 cur_state = self.simulator.get_state()
                 self.simulator.check_collision_with_marines()
                 self.simulator.move_marines()
                 self.current_player = 1
-                actions = self.possible_actions(cur_state)
-                random_action = random.choice(list(actions))
-                self.simulator.act(random_action, self.current_player)
-                cur_state = self.simulator.get_state()
+                action = random.choice(list(self.possible_actions(cur_state)))
+                self.simulator.act(action, self.current_player)
                 self.current_player = 2
+            return self.simulator.get_score()[f"player {self.player_number}"] \
+                - self.simulator.get_score()[f"player {3 - self.player_number}"]
 
-        self.simulator.set_state(self.initial_state)
-        self.simulator.turns_to_go = self.initial_state["turns to go"]
-        ret = self.simulator.get_score()[f"player {self.player_number}"] - self.simulator.get_score()[f"player {3 - self.player_number}"]
-        self.simulator.score = {'player 1': 0, 'player 2': 0}
-        return ret
-
-    def backpropagation(self, simulation_result):
-        node = self.last_node
+    def backpropagation(self, simulation_result, node):
         while node is not None:
             node.update(simulation_result)
             node = node.parent
 
     def act(self, state):
-        self.state = state
-        root = UCTNode(None, None, [], 3 - self.player_number)
-        tree = UCTTree(root)
-        for i in range(200):
+        self.root = UCTNode(None, None, 3 - self.player_number)
+        for i in range(100):
+            self.current_player = self.player_number
             self.simulator = Simulator(state)
-            cur_node = self.selection(tree)
-            self.expansion(tree, cur_node)
+            cur_node = self.selection()
+            self.expansion(cur_node)
             simulation_result = self.simulation()
-            self.backpropagation(simulation_result)
-        best_node = max(tree.root.children, key=lambda x: x.get_empirical_mean())
-        return best_node.actions[0]
-
-    def finished_expansion(self, state, node):
+            self.backpropagation(simulation_result, cur_node)
+        self.current_player = self.player_number
         actions = self.possible_actions(state)
-        diff = actions - node.children_actions
-        if len(diff) == 0:
-            return True
-        return False
+        relevant_children = [child for child in self.root.children if child.num_visits > 0 and child.action in actions]
+        best_node = max(relevant_children, key=lambda x: x.get_empirical_mean())
+        return best_node.action
 
     def possible_actions(self, state):
         # 5 actions - "sail", “collect_treasure”, “deposit_treasures”, "plunder",

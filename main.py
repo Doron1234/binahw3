@@ -71,6 +71,7 @@ class Game:
             self.score[0] += self.simulator.get_score()['player 2']
             self.score[1] += self.simulator.get_score()['player 1']
 
+
             print(f'***********  end of round!  ************ \n \n')
 
     def play_game(self):
@@ -81,12 +82,9 @@ class Game:
         print(f'***********  starting a first round!  ************ \n \n')
         self.agents = [self.initiate_agent(exp3, 1),
                        self.initiate_agent(sample_agent, 2)]
-        # self.agents = [self.initiate_agent(sample_agent, 1),
-        #                self.initiate_agent(sample_agent, 2)]
         self.ids = ['Your agent', 'Rival agent']
         self.play_episode()
         print(self.simulator.state)
-        print(self.score)
 
         print(f'***********  starting a second round!  ************ \n \n')
         self.simulator = Simulator(self.initial_state)
