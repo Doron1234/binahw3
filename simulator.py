@@ -2,6 +2,8 @@ from copy import deepcopy
 import logging
 import random
 
+random.seed(42)
+
 
 TREASURE_ARRIVAL_PROBABILITY = 0.3
 TREASURE_NAMES = ["treasure_1", "treasure_2","treasure_3","treasure_4","treasure_5","treasure_6","treasure_7",

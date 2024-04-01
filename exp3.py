@@ -52,23 +52,29 @@ class UCTNode:
             self.children.append(child)
             self.children_actions.add(action)
 
-    def select_child(self, actions):
+    def select_child(self, actions, h=None):
         relevant_children = [child for child in self.children if child.action in actions]
         if not relevant_children:
             return None
-        return max(relevant_children, key=lambda child: child.UCB1())
+        return max(relevant_children, key=lambda child: child.UCB1(h))
 
     def update(self, result):
         self.num_visits += 1
         self.sum_diffs += result
 
-    def UCB1(self):
+    def UCB1(self, h=None):
         if self.num_visits == 0:
             return float('inf')
         is_p1 = 1 if self.player_number == 1 else -1
-        # normal case for p1 but if p2 it is the opposite of what it minimizes so it maxes it as well
-        return self.get_empirical_mean() + is_p1 * (
-                2 * (math.log(self.parent.num_visits)) / self.num_visits) ** 0.5
+        if h is None:
+            # normal case for p1 but if p2 it is the opposite of what it minimizes so it maxes it as well
+            return self.get_empirical_mean() + is_p1 * (
+                    2 * (math.log(self.parent.num_visits)) / self.num_visits) ** 0.5
+        else:
+            return self.get_empirical_mean() + is_p1 * ((
+                                                                2 * (math.log(
+                                                            self.parent.num_visits)) / self.num_visits) ** 0.5 + h(
+                self.action))
 
     def get_empirical_mean(self):
         return self.sum_diffs / self.num_visits
@@ -95,14 +101,15 @@ class UCTAgent:
                 self.my_ships.append(ship_name)
             else:
                 self.enemy_ships.append(ship_name)
-        self.current_player =player_number
+        self.current_player = player_number
         self.root = UCTNode(None, None, 3 - player_number)
+        self.state_for_h = None
         # self.expansion(self.root)
 
     # def selection(self, UCT_tree):
     def selection(self):
-        possible_actions = self.possible_actions(self.simulator.get_state())
-        cur_node = self.root.select_child(possible_actions)
+        possible_actions = self.possible_actions(self.simulator.state)
+        cur_node = self.root.select_child(possible_actions, self.h)
         if cur_node is None:
             return self.root
         while True:
@@ -114,7 +121,7 @@ class UCTAgent:
                 self.current_player = 1
                 self.simulator.check_collision_with_marines()
                 self.simulator.move_marines()
-            possible_actions = self.possible_actions(self.simulator.get_state())
+            possible_actions = self.possible_actions(self.simulator.state)
             next_node = cur_node.select_child(possible_actions)
             if next_node is not None:
                 cur_node = next_node
@@ -124,7 +131,7 @@ class UCTAgent:
     # def expansion(self, UCT_tree, parent_node):
     def expansion(self, parent_node):
         # should be here after the action in parent_node was executed
-        all_actions = self.possible_actions(self.simulator.get_state())
+        all_actions = self.possible_actions(self.simulator.state)
         for action in all_actions:
             parent_node.add_child(action)
 
@@ -132,11 +139,14 @@ class UCTAgent:
         counter = 0
         while counter < 50:
             counter += 1
-            cur_state = self.simulator.get_state()
+            cur_state = self.simulator.state
             if self.current_player == 1:
-                action = random.choice(list(self.possible_actions(cur_state)))
+                pos_actions = list(self.possible_actions(cur_state))
+                h_scores = [1.25**(self.h(action, cur_state) + 1) for action in pos_actions]
+                action = random.choices(pos_actions, weights=h_scores)[0]
+                # action = random.choice(list(self.possible_actions(cur_state)))
                 self.simulator.act(action, self.current_player)
-                cur_state = self.simulator.get_state()
+                cur_state = self.simulator.state
                 self.current_player = 2
                 action = random.choice(list(self.possible_actions(cur_state)))
                 self.simulator.act(action, self.current_player)
@@ -144,17 +154,20 @@ class UCTAgent:
                 self.simulator.move_marines()
                 self.current_player = 1
             else:
-                action = random.choice(list(self.possible_actions(cur_state)))
+                pos_actions = list(self.possible_actions(cur_state))
+                h_scores = [1.25**(self.h(action, cur_state) + 1) for action in pos_actions]
+                action = random.choices(pos_actions, weights=h_scores)[0]
+                # action = random.choice(list(self.possible_actions(cur_state)))
                 self.simulator.act(action, self.current_player)
-                cur_state = self.simulator.get_state()
+                cur_state = self.simulator.state
                 self.simulator.check_collision_with_marines()
                 self.simulator.move_marines()
                 self.current_player = 1
                 action = random.choice(list(self.possible_actions(cur_state)))
                 self.simulator.act(action, self.current_player)
                 self.current_player = 2
-            return self.simulator.get_score()[f"player {self.player_number}"] \
-                - self.simulator.get_score()[f"player {3 - self.player_number}"]
+        return self.simulator.get_score()[f"player {self.player_number}"] \
+            - self.simulator.get_score()[f"player {3 - self.player_number}"]
 
     def backpropagation(self, simulation_result, node):
         while node is not None:
@@ -163,6 +176,7 @@ class UCTAgent:
 
     def act(self, state):
         self.root = UCTNode(None, None, 3 - self.player_number)
+        self.state_for_h = state
         for i in range(100):
             self.current_player = self.player_number
             self.simulator = Simulator(state)
@@ -214,3 +228,23 @@ class UCTAgent:
         all_actions = set(product(*acts_lists))
         # print("actions:", all_actions)
         return all_actions
+
+    def h(self, action, state=None):
+        ret_val = 0
+        for act in action:
+            if state is None:
+                state = self.state_for_h
+            treasures = state["treasures"]
+            if act[0] == 'plunder':
+                my_ship = act[1]
+                enemy_ship = act[2]
+                my_collected_reward = sum(
+                    [treasure['reward'] for treasure in treasures.values() if treasure['location'] == my_ship])
+                enemy_collected_reward = sum(
+                    [treasure['reward'] for treasure in treasures.values() if treasure['location'] == enemy_ship])
+                ret_val += enemy_collected_reward - my_collected_reward
+            if act[0] == 'collect':
+                ret_val += treasures[act[2]]['reward']
+            if act[0] == 'deposit':
+                ret_val += treasures[act[2]]['reward']
+        return ret_val
