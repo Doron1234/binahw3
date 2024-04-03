@@ -1,5 +1,7 @@
 import math
 import random
+import time
+
 from simulator import Simulator
 from itertools import product
 
@@ -227,17 +229,20 @@ class UCTAgent:
     def act(self, state):
         self.root = UCTNode(None, None, 3 - self.player_number)
         self.state_for_h = state
-        for i in range(100):
+        start_time = time.time()
+        # counter = 0
+        while time.time() - start_time < 4.5:
+        # for i in range(100):
             self.current_player = self.player_number
             self.simulator = Simulator(state)
             cur_node = self.selection()
             self.expansion(cur_node)
             simulation_result = self.simulation()
+            # counter += 1
             self.backpropagation(simulation_result, cur_node)
         self.current_player = self.player_number
         actions = self.possible_actions(state)
-        relevant_children = [child for child in self.root.children if
-                             child.num_visits > 0 and child.action in actions]
+        relevant_children = [child for child in self.root.children if child.num_visits > 0 and child.action in actions]
         best_node = max(relevant_children, key=lambda x: x.get_empirical_mean())
         return best_node.action
 
@@ -270,8 +275,7 @@ class UCTAgent:
                         and state["treasures"][treasure]["location"] == ship):
                     actions[ship].add(("deposit", ship, treasure))
             for enemy_ship_name in state["pirate_ships"].keys():
-                if (state["pirate_ships"][ship]["location"] == state["pirate_ships"][enemy_ship_name][
-                    "location"] and
+                if (state["pirate_ships"][ship]["location"] == state["pirate_ships"][enemy_ship_name]["location"] and
                         self.current_player != state["pirate_ships"][enemy_ship_name]["player"]):
                     actions[ship].add(("plunder", ship, enemy_ship_name))
             actions[ship].add(("wait", ship))
@@ -280,3 +284,23 @@ class UCTAgent:
         all_actions = set(product(*acts_lists))
         # print("actions:", all_actions)
         return all_actions
+
+    # def h(self, action, state=None):
+    #     ret_val = 0
+    #     for act in action:
+    #         if state is None:
+    #             state = self.state_for_h
+    #         treasures = state["treasures"]
+    #         if act[0] == 'plunder':
+    #             my_ship = act[1]
+    #             enemy_ship = act[2]
+    #             my_collected_reward = sum(
+    #                 [treasure['reward'] for treasure in treasures.values() if treasure['location'] == my_ship])
+    #             enemy_collected_reward = sum(
+    #                 [treasure['reward'] for treasure in treasures.values() if treasure['location'] == enemy_ship])
+    #             ret_val += enemy_collected_reward - my_collected_reward
+    #         if act[0] == 'collect':
+    #             ret_val += treasures[act[2]]['reward']
+    #         if act[0] == 'deposit':
+    #             ret_val += treasures[act[2]]['reward']
+    #     return ret_val

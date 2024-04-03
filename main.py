@@ -5,7 +5,7 @@ from copy import deepcopy
 import time
 
 CONSTRUCTOR_TIMEOUT = 60
-ACTION_TIMEOUT = 5000
+ACTION_TIMEOUT = 5
 DIMENSIONS = (7, 7)
 PENALTY = 10000
 
@@ -134,12 +134,12 @@ def main():
     }
 
     score = 0
-    for i in range(4):
+    for i in range(2):
         game = Game(an_input)
         results = game.play_game()
         print(f'Score for {exp3.IDS} is {results[0]}, score for {sample_agent.IDS} is {results[1]}')
         score += results[0] - results[1]
-    print(score/4)
+    # print(score/2)
     # game = Game(an_input)
     # results = game.play_game()
     # print(f'Score for {exp3.IDS} is {results[0]}, score for {sample_agent.IDS} is {results[1]}')
