@@ -4,6 +4,7 @@ from simulator import Simulator
 import random
 from itertools import product
 import math
+import time
 
 random.seed(42)
 
@@ -142,7 +143,7 @@ class UCTAgent:
             cur_state = self.simulator.state
             if self.current_player == 1:
                 pos_actions = list(self.possible_actions(cur_state))
-                h_scores = [1.25**(self.h(action, cur_state) + 1) for action in pos_actions]
+                h_scores = [1.25 ** (self.h(action, cur_state) + 1) for action in pos_actions]
                 action = random.choices(pos_actions, weights=h_scores)[0]
                 # action = random.choice(list(self.possible_actions(cur_state)))
                 self.simulator.act(action, self.current_player)
@@ -155,7 +156,7 @@ class UCTAgent:
                 self.current_player = 1
             else:
                 pos_actions = list(self.possible_actions(cur_state))
-                h_scores = [1.25**(self.h(action, cur_state) + 1) for action in pos_actions]
+                h_scores = [1.25 ** (self.h(action, cur_state) + 1) for action in pos_actions]
                 action = random.choices(pos_actions, weights=h_scores)[0]
                 # action = random.choice(list(self.possible_actions(cur_state)))
                 self.simulator.act(action, self.current_player)
@@ -177,12 +178,16 @@ class UCTAgent:
     def act(self, state):
         self.root = UCTNode(None, None, 3 - self.player_number)
         self.state_for_h = state
-        for i in range(100):
+        start_time = time.time()
+        # counter = 0
+        while time.time() - start_time < 4.5:
+        # for i in range(100):
             self.current_player = self.player_number
             self.simulator = Simulator(state)
             cur_node = self.selection()
             self.expansion(cur_node)
             simulation_result = self.simulation()
+            # counter += 1
             self.backpropagation(simulation_result, cur_node)
         self.current_player = self.player_number
         actions = self.possible_actions(state)
