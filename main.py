@@ -81,7 +81,7 @@ class Game:
         """
         print(f'***********  starting a first round!  ************ \n \n')
         self.agents = [self.initiate_agent(exp3, 1),
-                       self.initiate_agent(sample_agent, 2)]
+                       self.initiate_agent(exp3, 2, UCT_flag=True)]
         self.ids = ['Your agent', 'Rival agent']
         self.play_episode()
         print(self.simulator.state)
@@ -89,7 +89,7 @@ class Game:
         print(f'***********  starting a second round!  ************ \n \n')
         self.simulator = Simulator(self.initial_state)
 
-        self.agents = [self.initiate_agent(sample_agent, 1),
+        self.agents = [self.initiate_agent(exp3, 1 , UCT_flag=True),
                        self.initiate_agent(exp3, 2)]
         self.ids = ['Rival agent', 'Your agent']
         self.play_episode(swapped=True)
@@ -134,7 +134,7 @@ def main():
     }
 
     score = 0
-    for i in range(2):
+    for i in range(5):
         game = Game(an_input)
         results = game.play_game()
         print(f'Score for {exp3.IDS} is {results[0]}, score for {sample_agent.IDS} is {results[1]}')

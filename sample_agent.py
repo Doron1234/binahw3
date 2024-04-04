@@ -124,18 +124,13 @@ class UCTNode:
         if self.num_visits == 0:
             return float('inf')
         is_p1 = 1 if self.player_number == 1 else -1
-        if h is None:
-            # normal case for p1 but if p2 it is the opposite of what it minimizes so it maxes it as well
-            return self.get_empirical_mean() + is_p1 * (
-                    2 * (math.log(self.parent.num_visits)) / self.num_visits) ** 0.5
-        else:
-            return self.get_empirical_mean() + is_p1 * ((
-                                                                2 * (math.log(
-                                                            self.parent.num_visits)) / self.num_visits) ** 0.5 + h(
-                self.action))
+        return self.get_empirical_mean(h) + is_p1 * (
+            2 * (math.log(self.parent.num_visits)) / self.num_visits) ** 0.5
 
-    def get_empirical_mean(self):
-        return self.sum_diffs / self.num_visits
+    def get_empirical_mean(self, h=None):
+        if h is None:
+            return self.sum_diffs / self.num_visits
+        return self.sum_diffs / self.num_visits + h(self.action)
 
 
 class UCTTree:
@@ -167,7 +162,7 @@ class UCTAgent:
     # def selection(self, UCT_tree):
     def selection(self):
         possible_actions = self.possible_actions(self.simulator.state)
-        cur_node = self.root.select_child(possible_actions)
+        cur_node = self.root.select_child(possible_actions, self.h)
         if cur_node is None:
             return self.root
         while True:
@@ -195,11 +190,14 @@ class UCTAgent:
 
     def simulation(self):
         counter = 0
-        while counter < 50:
+        while counter < 25:
             counter += 1
             cur_state = self.simulator.state
             if self.current_player == 1:
-                action = random.choice(list(self.possible_actions(cur_state)))
+                pos_actions = list(self.possible_actions(cur_state))
+                h_scores = [1.25 ** (self.h(action, cur_state) + 1) for action in pos_actions]
+                action = random.choices(pos_actions, weights=h_scores)[0]
+                # action = random.choice(list(self.possible_actions(cur_state)))
                 self.simulator.act(action, self.current_player)
                 cur_state = self.simulator.state
                 self.current_player = 2
@@ -209,7 +207,10 @@ class UCTAgent:
                 self.simulator.move_marines()
                 self.current_player = 1
             else:
-                action = random.choice(list(self.possible_actions(cur_state)))
+                pos_actions = list(self.possible_actions(cur_state))
+                h_scores = [1.25 ** (self.h(action, cur_state) + 1) for action in pos_actions]
+                action = random.choices(pos_actions, weights=h_scores)[0]
+                # action = random.choice(list(self.possible_actions(cur_state)))
                 self.simulator.act(action, self.current_player)
                 cur_state = self.simulator.state
                 self.simulator.check_collision_with_marines()
@@ -243,7 +244,7 @@ class UCTAgent:
         self.current_player = self.player_number
         actions = self.possible_actions(state)
         relevant_children = [child for child in self.root.children if child.num_visits > 0 and child.action in actions]
-        best_node = max(relevant_children, key=lambda x: x.get_empirical_mean())
+        best_node = max(relevant_children, key=lambda x: x.get_empirical_mean(self.h))
         return best_node.action
 
     def possible_actions(self, state):
@@ -285,22 +286,40 @@ class UCTAgent:
         # print("actions:", all_actions)
         return all_actions
 
-    # def h(self, action, state=None):
-    #     ret_val = 0
-    #     for act in action:
-    #         if state is None:
-    #             state = self.state_for_h
-    #         treasures = state["treasures"]
-    #         if act[0] == 'plunder':
-    #             my_ship = act[1]
-    #             enemy_ship = act[2]
-    #             my_collected_reward = sum(
-    #                 [treasure['reward'] for treasure in treasures.values() if treasure['location'] == my_ship])
-    #             enemy_collected_reward = sum(
-    #                 [treasure['reward'] for treasure in treasures.values() if treasure['location'] == enemy_ship])
-    #             ret_val += enemy_collected_reward - my_collected_reward
-    #         if act[0] == 'collect':
-    #             ret_val += treasures[act[2]]['reward']
-    #         if act[0] == 'deposit':
-    #             ret_val += treasures[act[2]]['reward']
-    #     return ret_val
+    def h(self, action, state=None):
+        ret_val = 0
+        for act in action:
+            if state is None:
+                state = self.state_for_h
+            treasures = state["treasures"]
+            my_ship = act[1]
+            my_collected_reward = sum(
+                [treasure['reward'] for treasure in treasures.values() if treasure['location'] == my_ship])
+            if act[0] == 'plunder':
+                enemy_ship = act[2]
+                enemy_collected_reward = sum(
+                    [treasure['reward'] for treasure in treasures.values() if treasure['location'] == enemy_ship])
+                ret_val += (enemy_collected_reward - my_collected_reward)
+                for marine in state["marine_ships"].values():
+                    if marine["path"][marine["index"]] == state["pirate_ships"][my_ship]["location"]:
+                        ret_val -= 1
+            if act[0] == 'collect':
+                ret_val += treasures[act[2]]['reward']
+                for marine in state["marine_ships"].values():
+                    if marine["path"][marine["index"]] == state["pirate_ships"][my_ship]["location"]:
+                        ret_val -= 1
+                        ret_val -= my_collected_reward
+                        ret_val -= treasures[act[2]]['reward']
+            if act[0] == 'deposit':
+                ret_val += 2 * treasures[act[2]]['reward']
+            if act[0] == 'sail':
+                for marine in state["marine_ships"].values():
+                    if marine["path"][marine["index"]] == act[2]:
+                        ret_val -= 1
+                        ret_val -= my_collected_reward
+            if act[0] == "wait":
+                for marine in state["marine_ships"].values():
+                    if marine["path"][marine["index"]] == state["pirate_ships"][my_ship]["location"]:
+                        ret_val -= 1
+                        ret_val -= my_collected_reward
+        return ret_val
